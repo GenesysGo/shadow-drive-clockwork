@@ -1,0 +1,23 @@
+[package]
+name = "chain-drive"
+version = "0.1.0"
+description = "Created with Anchor"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "chain_drive"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "0.26.0"
+sha2 = "0.10.6"
+
+[dev-dependencies]
+anchor-client = "0.26.0"

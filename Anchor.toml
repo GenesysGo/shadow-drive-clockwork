@@ -1,0 +1,17 @@
+[features]
+seeds = false
+skip-lint = false
+[programs.localnet]
+chain_drive = "DaWtvgVmLrXKxEN7M7XVrSppsjwN8Pn8MXRiDdcW2a1V"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "Devnet"
+wallet = "dev.json"
+
+[scripts]
+#test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+test = "cargo test"
+
