@@ -1,8 +1,10 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::instruction::Instruction;
 use anchor_lang::InstructionData;
-use clockwork_sdk::{cpi::ThreadCreate, state::Trigger};
-use sha2::{Digest, Sha256};
+use clockwork_sdk::{
+    cpi::ThreadCreate, state::InstructionData as ClockworkInstructionData, state::Trigger,
+};
+use sha2::{Digest, Sha224, Sha256};
 
 declare_id!("G6xPudzNNM8CwfLHC9ByzrF67LcwyiRe4t9vHg34eqpR");
 
@@ -16,12 +18,15 @@ pub mod constants;
 #[program]
 pub mod chain_drive {
 
+    use anchor_lang::solana_program::native_token::LAMPORTS_PER_SOL;
+
     use super::*;
 
     #[allow(unused)]
     pub fn summon(
         ctx: Context<Summon>,
-        source: String,
+        storage_account: Pubkey,
+        filename: String,
         data_len: usize,
         slot_delay: u64,
         hash: [u8; 32],
@@ -30,8 +35,9 @@ pub mod chain_drive {
         let clock = Clock::get()?;
 
         ctx.accounts.metadata.hash = hash;
-        ctx.accounts.metadata.source = source.clone();
-        ctx.accounts.metadata.slot = clock.slot + slot_delay;
+        ctx.accounts.metadata.storage_account = storage_account;
+        ctx.accounts.metadata.filename = filename.clone();
+        ctx.accounts.metadata.slot = None;
         ctx.accounts.metadata.uploader = Pubkey::default();
         ctx.accounts.metadata.summoner = ctx.accounts.summoner.key();
         ctx.accounts.metadata.data = vec![];
@@ -40,7 +46,8 @@ pub mod chain_drive {
         let metadata_bump: u8 = *ctx.bumps.get("metadata").unwrap();
         let metadata_seeds: &[&[u8]] = &[
             ctx.accounts.metadata.summoner.as_ref(),
-            source.as_ref(),
+            storage_account.as_ref(),
+            filename.as_ref(),
             &[metadata_bump],
         ];
         let signer_seeds: &[&[&[u8]]] = &[metadata_seeds];
@@ -69,37 +76,46 @@ pub mod chain_drive {
             ],
             data: upload_ix_data,
         };
+        let clockwork_upload_ix: ClockworkInstructionData = upload_ix.into();
         let upload_trigger = Trigger::Immediate;
 
-        clockwork_sdk::cpi::thread_create(
-            cpi_ctx,
-            source.clone(),
-            upload_ix.into(),
-            upload_trigger,
-        );
+        // clockwork_sdk::cpi::thread_create(
+        //     cpi_ctx,
+        //     LAMPORTS_PER_SOL,
+        //     ctx.accounts.metadata.key().to_bytes().to_vec(),
+        //     vec![clockwork_upload_ix],
+        //     upload_trigger,
+        // );
 
         Ok(())
     }
 
     pub fn upload(ctx: Context<Upload>, data: Vec<u8>) -> Result<()> {
-        // TODO: CHECK HASH
+        // Check hash
         let mut hasher = Sha256::new();
         hasher.update(&data);
         let hash = hasher.finalize();
-
         if *hash != ctx.accounts.metadata.hash {
             return Err(PortalError::InvalidHash.into());
         }
 
-        ctx.accounts.metadata.data = data;
+        // Get solana clock, and record slot and uploader
+        let clock = Clock::get()?;
+        ctx.accounts.metadata.slot = Some(clock.slot);
         ctx.accounts.metadata.uploader = ctx.accounts.uploader.key();
+
         Ok(())
     }
+
+    pub fn dummy(ctx: Context<X>) -> Result<()> {
+        Ok(())
+    }
+
     pub fn delete(ctx: Context<Delete>) -> Result<()> {
         // Get solana clock
         let clock = Clock::get()?;
 
-        if clock.slot < ctx.accounts.metadata.slot {
+        if Some(clock.slot) < ctx.accounts.metadata.slot {
             return Err(PortalError::EarlyDelete.into());
         }
         Ok(())
@@ -113,3 +129,6 @@ pub enum PortalError {
     #[msg("you tried to upload data with incorrect hash")]
     InvalidHash,
 }
+
+#[derive(Accounts)]
+pub struct X {}

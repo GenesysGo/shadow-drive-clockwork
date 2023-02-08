@@ -12,7 +12,8 @@ pub struct Upload<'info> {
         mut,
         seeds = [
             metadata.summoner.as_ref(),
-            metadata.source.as_ref()
+            metadata.storage_account.as_ref(),
+            metadata.filename.as_ref(),
         ],
         bump,
     )]

@@ -1,0 +1,15 @@
+[package]
+name = "shadow-portal-tests"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anchor-client = "0.26.0"
+reqwest = "0.11.14"
+clockwork-sdk = {path = "../../clockwork/sdk"}
+sha2 = "0.10.6"
+
+[dependencies.chain-drive]
+path = "../programs/chain-drive/"

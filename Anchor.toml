@@ -2,7 +2,7 @@
 seeds = false
 skip-lint = false
 [programs.localnet]
-chain_drive = "DaWtvgVmLrXKxEN7M7XVrSppsjwN8Pn8MXRiDdcW2a1V"
+chain_drive = "G6xPudzNNM8CwfLHC9ByzrF67LcwyiRe4t9vHg34eqpR"
 
 [registry]
 url = "https://api.apr.dev"

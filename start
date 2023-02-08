@@ -1,0 +1,8 @@
+solana-test-validator -r \ 
+	--bpf-program F8dKseqmBoAkHx3c58Lmb9TgJv5qeTf3BbtZZSEzYvUa ../clockwork/lib/clockwork_network_program.so \ 
+	--bpf-program 3XXuUFfweXBwFgFfYaejLvZE4cGZiHgKiGfMtdxNzYmv ../clockwork/lib/clockwork_thread_program.so \ 
+	--bpf-program E7p5KFo8kKCDm6BUnWtnVFkQSYh6ZA6xaGAuvpv8NXTa ../clockwork/lib/clockwork_webhook_program.so \ 
+        --bpf-program G6xPudzNNM8CwfLHC9ByzrF67LcwyiRe4t9vHg34eqpR ./target/deploy/chain_drive.so \
+        --geyser-plugin-config ../clockwork/lib/geyser-plugin-config.json
+
+
