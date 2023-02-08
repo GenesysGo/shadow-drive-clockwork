@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
 
+use crate::constants::SDRIVE_OBJECT_PREFIX;
+
 #[derive(Accounts)]
 #[instruction(source: String, data_len: usize)]
 pub struct Summon<'info> {
@@ -26,9 +28,14 @@ pub struct Summon<'info> {
 pub struct DataToBeSummoned {
     pub source: String,
     pub hash: [u8; 32],
-    /// TODO: think about u16::MAX, and time units
     pub slot: u64,
     pub uploader: Pubkey,
     pub summoner: Pubkey,
     pub data: Vec<u8>,
+}
+
+impl DataToBeSummoned {
+    pub fn get_source(&self) -> String {
+        format!("{SDRIVE_OBJECT_PREFIX}/{}", &self.source)
+    }
 }
