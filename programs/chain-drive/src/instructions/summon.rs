@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use clockwork_sdk::{self, state::Thread, ThreadProgram};
 
 use crate::constants::SDRIVE_OBJECT_PREFIX;
 
@@ -19,6 +20,14 @@ pub struct Summon<'info> {
         bump,
     )]
     pub metadata: Account<'info, DataToBeSummoned>,
+
+    #[account(
+        address = Thread::pubkey(metadata.key(), source)
+    )]
+    pub sdrive_automation: SystemAccount<'info>,
+
+    #[account(address = clockwork_sdk::ThreadProgram::id())]
+    pub automation_program: Program<'info, ThreadProgram>,
 
     pub system_program: Program<'info, System>,
 }

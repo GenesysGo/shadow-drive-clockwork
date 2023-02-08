@@ -1,8 +1,7 @@
-use std::{rc::Rc, str::FromStr};
+use std::rc::Rc;
 
 use anchor_client::{
     anchor_lang::system_program,
-    solana_client::rpc_config::RpcSendTransactionConfig,
     solana_sdk::{
         commitment_config::CommitmentConfig,
         pubkey::Pubkey,
@@ -12,13 +11,13 @@ use anchor_client::{
     Client, Cluster, Program,
 };
 
-use chain_drive::instructions::summon::DataToBeSummoned;
+use anchor_lang::Id;
+use chain_drive::{instructions::summon::DataToBeSummoned, ID as PROGRAM_ID};
+use clockwork_sdk::state::Thread;
 use sha2::{Digest, Sha256};
 
 #[test]
 fn test_summon() {
-    let PROGRAM_ID: Pubkey =
-        Pubkey::from_str("DaWtvgVmLrXKxEN7M7XVrSppsjwN8Pn8MXRiDdcW2a1V").unwrap();
     // Get dev and mint key.
     let dev_key: Rc<Keypair> =
         Rc::new(read_keypair_file("../../dev.json").expect("Example requires a keypair file"));
@@ -42,7 +41,7 @@ fn test_summon() {
     let data_len = data.len();
 
     // Get metadata PDA
-    let metadata_pda = {
+    let metadata_pda: Pubkey = {
         let mut bump: u8 = 255;
         loop {
             if let Ok(pda) = Pubkey::create_program_address(
@@ -55,6 +54,7 @@ fn test_summon() {
             }
         }
     };
+    let sdrive_automation: Pubkey = Thread::pubkey(metadata_pda, source.clone());
 
     // Construct and send summon instruction
     let summon_sig: Signature = program
@@ -63,6 +63,8 @@ fn test_summon() {
             summoner: dev_key.pubkey(),
             metadata: metadata_pda,
             system_program: system_program::ID,
+            sdrive_automation,
+            automation_program: clockwork_sdk::ThreadProgram::id(),
         })
         .args(chain_drive::instruction::Summon {
             source: source.clone(),

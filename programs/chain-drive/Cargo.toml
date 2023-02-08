@@ -17,7 +17,7 @@ default = []
 
 [dependencies]
 anchor-lang = "0.26.0"
+clockwork-sdk = "1.4.2"
 sha2 = "0.10.6"
-
 [dev-dependencies]
 anchor-client = "0.26.0"
