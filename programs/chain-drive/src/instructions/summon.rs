@@ -1,4 +1,4 @@
-use anchor_lang::prelude::*;
+use anchor_lang::{prelude::*, Discriminator};
 use clockwork_sdk::{self, state::Thread, ThreadProgram};
 
 use crate::constants::SDRIVE_OBJECT_PREFIX;
@@ -22,15 +22,6 @@ pub struct Summon<'info> {
     )]
     pub metadata: Account<'info, DataToBeSummoned>,
 
-    #[account(
-        mut,
-        address = Thread::pubkey(metadata.key(), metadata.key().to_bytes().to_vec())
-    )]
-    pub sdrive_automation: SystemAccount<'info>,
-
-    #[account(address = clockwork_sdk::ThreadProgram::id())]
-    pub automation_program: Program<'info, ThreadProgram>,
-
     pub system_program: Program<'info, System>,
 }
 
@@ -50,6 +41,7 @@ pub struct DataToBeSummoned {
     pub uploader: Pubkey,
     pub summoner: Pubkey,
     pub data: Vec<u8>,
+    pub uploaded: bool,
 }
 
 impl DataToBeSummoned {

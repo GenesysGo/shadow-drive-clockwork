@@ -3,10 +3,10 @@ use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
 pub struct Delete<'info> {
-    #[account()]
+    #[account(mut)]
     pub uploader: SystemAccount<'info>,
 
-    #[account()]
+    #[account(mut)]
     pub summoner: SystemAccount<'info>,
 
     #[account(

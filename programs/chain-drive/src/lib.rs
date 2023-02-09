@@ -1,6 +1,12 @@
+use std::str::FromStr;
+
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::instruction::Instruction;
 use anchor_lang::InstructionData;
+use chrono::DateTime;
+use chrono::NaiveDateTime;
+use chrono::Utc;
+use clockwork_cron::Schedule;
 use clockwork_sdk::{
     cpi::ThreadCreate, state::InstructionData as ClockworkInstructionData, state::Trigger,
 };
@@ -18,7 +24,7 @@ pub mod constants;
 #[program]
 pub mod chain_drive {
 
-    use anchor_lang::solana_program::native_token::LAMPORTS_PER_SOL;
+    use crate::constants::TIME_DELAY_SECS;
 
     use super::*;
 
@@ -42,50 +48,8 @@ pub mod chain_drive {
         ctx.accounts.metadata.summoner = ctx.accounts.summoner.key();
         ctx.accounts.metadata.data = vec![];
 
-        // AIDAN BARRIER
-        let metadata_bump: u8 = *ctx.bumps.get("metadata").unwrap();
-        let metadata_seeds: &[&[u8]] = &[
-            ctx.accounts.metadata.summoner.as_ref(),
-            storage_account.as_ref(),
-            filename.as_ref(),
-            &[metadata_bump],
-        ];
-        let signer_seeds: &[&[&[u8]]] = &[metadata_seeds];
-
-        // ThreadCreate accounts: authority, payer, sys program, thread
-        let accounts = ThreadCreate {
-            authority: ctx.accounts.metadata.to_account_info(),
-            payer: ctx.accounts.summoner.to_account_info(),
-            system_program: ctx.accounts.system_program.to_account_info(),
-            thread: ctx.accounts.sdrive_automation.to_account_info(),
-        };
-        let cpi_ctx = CpiContext::new_with_signer(
-            ctx.accounts.automation_program.to_account_info(),
-            accounts,
-            signer_seeds,
-        );
-        drop(signer_seeds);
-
-        // Construct kickoff ix
-        let upload_ix_data = crate::instruction::Upload { data: vec![] }.data();
-        let upload_ix = Instruction {
-            program_id: crate::ID,
-            accounts: vec![
-                AccountMeta::new(clockwork_sdk::utils::PAYER_PUBKEY, true),
-                AccountMeta::new(ctx.accounts.metadata.key(), false),
-            ],
-            data: upload_ix_data,
-        };
-        let clockwork_upload_ix: ClockworkInstructionData = upload_ix.into();
-        let upload_trigger = Trigger::Immediate;
-
-        // clockwork_sdk::cpi::thread_create(
-        //     cpi_ctx,
-        //     LAMPORTS_PER_SOL,
-        //     ctx.accounts.metadata.key().to_bytes().to_vec(),
-        //     vec![clockwork_upload_ix],
-        //     upload_trigger,
-        // );
+        // transfer SHDW to GG wallet
+        // fn(data_len * 2)
 
         Ok(())
     }
@@ -103,11 +67,67 @@ pub mod chain_drive {
         let clock = Clock::get()?;
         ctx.accounts.metadata.slot = Some(clock.slot);
         ctx.accounts.metadata.uploader = ctx.accounts.uploader.key();
+        ctx.accounts.metadata.data = data;
+        ctx.accounts.metadata.uploaded = true;
 
-        Ok(())
-    }
+        let metadata_bump: u8 = *ctx.bumps.get("metadata").unwrap();
+        let metadata_seeds: &[&[u8]] = &[
+            ctx.accounts.metadata.summoner.as_ref(),
+            ctx.accounts.metadata.storage_account.as_ref(),
+            ctx.accounts.metadata.filename.as_ref(),
+            &[metadata_bump],
+        ];
+        let signer_seeds: &[&[&[u8]]] = &[metadata_seeds];
 
-    pub fn dummy(ctx: Context<X>) -> Result<()> {
+        // ThreadCreate accounts: authority, payer, sys program, thread
+        let accounts = ThreadCreate {
+            authority: ctx.accounts.metadata.to_account_info(),
+            payer: ctx.accounts.uploader.to_account_info(),
+            system_program: ctx.accounts.system_program.to_account_info(),
+            thread: ctx.accounts.sdrive_automation.to_account_info(),
+        };
+        let cpi_ctx = CpiContext::<ThreadCreate>::new_with_signer(
+            ctx.accounts.automation_program.to_account_info(),
+            accounts,
+            signer_seeds,
+        );
+        drop(signer_seeds);
+
+        // TODO SOL FROM METADATA TO UPLOADER
+
+        // Construct kickoff ix
+        let delete_ix_data = crate::instruction::Delete {}.data();
+        let delete_ix = Instruction {
+            program_id: crate::ID,
+            accounts: vec![
+                AccountMeta::new(clockwork_sdk::utils::PAYER_PUBKEY, true),
+                AccountMeta::new(ctx.accounts.metadata.summoner, false),
+                AccountMeta::new(ctx.accounts.metadata.key(), false),
+            ],
+            data: delete_ix_data,
+        };
+        let clockwork_delete_ix: ClockworkInstructionData = delete_ix.into();
+
+        let upload_trigger = Trigger::Cron {
+            schedule: get_next_n_seconds_schedule(clock.unix_timestamp, TIME_DELAY_SECS),
+            skippable: false,
+        };
+
+        let metadata_key = ctx.accounts.metadata.key().to_bytes().to_vec();
+
+        const SOL_TX_FEE: u64 = 5_000;
+        const CW_TX_FEE: u64 = 1_000;
+        const DELETE_TX_FEE: u64 = SOL_TX_FEE + CW_TX_FEE;
+
+        // std::panic::set_hook(Box::new(|_info| {}));
+        clockwork_sdk::cpi::thread_create(
+            cpi_ctx,
+            DELETE_TX_FEE,
+            metadata_key,
+            vec![clockwork_delete_ix],
+            upload_trigger,
+        )?;
+
         Ok(())
     }
 
@@ -132,3 +152,73 @@ pub enum PortalError {
 
 #[derive(Accounts)]
 pub struct X {}
+
+#[test]
+fn try_cron() {
+    for time in (0..1_000_000_000).step_by(10_000_000) {
+        for offset in 1..10 {
+            let schedule = get_next_n_minutes_schedule(time, offset);
+            fn next_timestamp(after: i64, schedule: String) -> Option<i64> {
+                Schedule::from_str(&schedule)
+                    .unwrap()
+                    .next_after(&DateTime::<Utc>::from_utc(
+                        NaiveDateTime::from_timestamp(after, 0),
+                        Utc,
+                    ))
+                    .take()
+                    .map(|datetime| datetime.timestamp())
+            };
+
+            let expected = time + offset * 60;
+
+            assert_eq!(
+                expected,
+                next_timestamp(time, schedule).unwrap(),
+                "failed at time = {time}, offset = {offset}"
+            )
+        }
+    }
+}
+
+#[test]
+fn try_cron_seconds() {
+    for time in (0..1_000_000_000).step_by(10_000_000) {
+        for offset in 1..10 {
+            let schedule = get_next_n_seconds_schedule(time, offset);
+            fn next_timestamp(after: i64, schedule: String) -> Option<i64> {
+                Schedule::from_str(&schedule)
+                    .unwrap()
+                    .next_after(&DateTime::<Utc>::from_utc(
+                        NaiveDateTime::from_timestamp(after, 0),
+                        Utc,
+                    ))
+                    .take()
+                    .map(|datetime| datetime.timestamp())
+            };
+
+            let expected = time + offset;
+
+            assert_eq!(
+                expected,
+                next_timestamp(time, schedule).unwrap(),
+                "failed at time = {time}, offset = {offset}"
+            )
+        }
+    }
+}
+
+#[inline(always)]
+fn get_next_n_minutes_schedule(unix_timestamp: i64, n_minutes: i64) -> String {
+    let later = unix_timestamp + n_minutes * 60;
+    let second_place = later % 60;
+    let minute_place = (later / 60) % 60;
+    format!("{second_place} {minute_place} * * * * *")
+}
+
+#[inline(always)]
+fn get_next_n_seconds_schedule(unix_timestamp: i64, n_seconds: i64) -> String {
+    let later = unix_timestamp + n_seconds;
+    let second_place = later % 60;
+    let minute_place = (later / 60) % 60;
+    format!("{second_place} {minute_place} * * * * *")
+}
