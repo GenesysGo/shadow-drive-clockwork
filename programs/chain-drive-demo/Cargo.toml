@@ -1,0 +1,21 @@
+[package]
+name = "chain-drive-demo"
+version = "0.1.0"
+description = "Created with Anchor"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "chain_drive_demo"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "0.26.0"
+chain-drive = { path = "../chain-drive" , features = ["cpi"]}
+clockwork-sdk = {path = "../../../clockwork/sdk"}
