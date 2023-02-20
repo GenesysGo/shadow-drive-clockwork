@@ -3,10 +3,6 @@ use std::str::FromStr;
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::instruction::Instruction;
 use anchor_lang::InstructionData;
-use chrono::DateTime;
-use chrono::NaiveDateTime;
-use chrono::Utc;
-use clockwork_cron::Schedule;
 use clockwork_sdk::{
     cpi::ThreadCreate, state::InstructionData as ClockworkInstructionData, state::Trigger,
 };
@@ -34,8 +30,8 @@ pub mod chain_drive {
         storage_account: Pubkey,
         filename: String,
         data_len: usize,
-        slot_delay: u64,
         hash: [u8; 32],
+        callback: Option<ClockworkInstructionData>,
     ) -> Result<()> {
         // Get solana clock
         let clock = Clock::get()?;
@@ -43,10 +39,11 @@ pub mod chain_drive {
         ctx.accounts.metadata.hash = hash;
         ctx.accounts.metadata.storage_account = storage_account;
         ctx.accounts.metadata.filename = filename.clone();
-        ctx.accounts.metadata.slot = None;
+        ctx.accounts.metadata.time = i64::MAX;
         ctx.accounts.metadata.uploader = Pubkey::default();
         ctx.accounts.metadata.summoner = ctx.accounts.summoner.key();
         ctx.accounts.metadata.data = vec![];
+        ctx.accounts.metadata.callback = callback;
 
         // transfer SHDW to GG wallet
         // fn(data_len * 2)
@@ -65,10 +62,17 @@ pub mod chain_drive {
 
         // Get solana clock, and record slot and uploader
         let clock = Clock::get()?;
-        ctx.accounts.metadata.slot = Some(clock.slot);
+        ctx.accounts.metadata.time = clock.unix_timestamp;
         ctx.accounts.metadata.uploader = ctx.accounts.uploader.key();
         ctx.accounts.metadata.data = data;
         ctx.accounts.metadata.uploaded = true;
+
+        let callback_present = ctx.accounts.metadata.callback.is_some();
+        let mut instructions = if callback_present {
+            vec![ctx.accounts.metadata.callback.take().unwrap()]
+        } else {
+            vec![]
+        };
 
         let metadata_bump: u8 = *ctx.bumps.get("metadata").unwrap();
         let metadata_seeds: &[&[u8]] = &[
@@ -107,6 +111,7 @@ pub mod chain_drive {
             data: delete_ix_data,
         };
         let clockwork_delete_ix: ClockworkInstructionData = delete_ix.into();
+        instructions.push(clockwork_delete_ix);
 
         let upload_trigger = Trigger::Cron {
             schedule: get_next_n_seconds_schedule(clock.unix_timestamp, TIME_DELAY_SECS),
@@ -119,12 +124,11 @@ pub mod chain_drive {
         const CW_TX_FEE: u64 = 1_000;
         const DELETE_TX_FEE: u64 = SOL_TX_FEE + CW_TX_FEE;
 
-        // std::panic::set_hook(Box::new(|_info| {}));
         clockwork_sdk::cpi::thread_create(
             cpi_ctx,
             DELETE_TX_FEE,
             metadata_key,
-            vec![clockwork_delete_ix],
+            instructions,
             upload_trigger,
         )?;
 
@@ -135,7 +139,7 @@ pub mod chain_drive {
         // Get solana clock
         let clock = Clock::get()?;
 
-        if Some(clock.slot) < ctx.accounts.metadata.slot {
+        if clock.unix_timestamp < ctx.accounts.metadata.time.saturating_add(TIME_DELAY_SECS) {
             return Err(PortalError::EarlyDelete.into());
         }
         Ok(())

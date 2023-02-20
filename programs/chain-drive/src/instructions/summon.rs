@@ -1,10 +1,14 @@
 use anchor_lang::{prelude::*, Discriminator};
-use clockwork_sdk::{self, state::Thread, ThreadProgram};
+use clockwork_sdk::{
+    self,
+    state::{InstructionData as ClockworkInstructionData, Thread},
+    ThreadProgram,
+};
 
 use crate::constants::SDRIVE_OBJECT_PREFIX;
 
 #[derive(Accounts)]
-#[instruction(storage_account: Pubkey, filename: String, data_len: usize, slot_delay: u64, hash: [u8; 32])]
+#[instruction(storage_account: Pubkey, filename: String, data_len: usize, hash: [u8; 32])]
 pub struct Summon<'info> {
     #[account(mut)]
     pub summoner: Signer<'info>,
@@ -37,11 +41,12 @@ pub struct DataToBeSummoned {
     pub storage_account: Pubkey,
     pub filename: String,
     pub hash: [u8; 32],
-    pub slot: Option<u64>,
+    pub time: i64,
     pub uploader: Pubkey,
     pub summoner: Pubkey,
-    pub data: Vec<u8>,
     pub uploaded: bool,
+    pub callback: Option<ClockworkInstructionData>,
+    pub data: Vec<u8>,
 }
 
 impl DataToBeSummoned {
