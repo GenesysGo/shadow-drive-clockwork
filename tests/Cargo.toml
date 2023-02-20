@@ -13,3 +13,6 @@ sha2 = "0.10.6"
 
 [dependencies.chain-drive]
 path = "../programs/chain-drive/"
+
+[dependencies.chain-drive-demo]
+path = "../programs/chain-drive-demo/"

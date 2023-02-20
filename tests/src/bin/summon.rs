@@ -36,6 +36,7 @@ fn main() {
 
     // Instruction arguments
     let storage_account = Pubkey::from_str("53AqvNpBsk3wci9do6buRwaRr3spLZE1ySNfEYxMZEqG").unwrap();
+    println!("storage account {:?}", storage_account.to_bytes());
     let filename = "test.txt";
     let data = reqwest::blocking::get(DataToBeSummoned::build_source(&storage_account, &filename))
         .unwrap()
@@ -44,6 +45,7 @@ fn main() {
     let mut hasher = Sha256::new();
     hasher.update(&data);
     let hash: [u8; 32] = hasher.finalize().try_into().unwrap();
+    println!("{hash:?}");
     let slot_delay = 0;
     let data_len = data.len();
 
@@ -73,7 +75,7 @@ fn main() {
         .args(chain_drive::instruction::Summon {
             storage_account,
             filename: filename.to_string(),
-            slot_delay,
+            callback: None,
             hash,
             data_len,
         })
@@ -133,7 +135,7 @@ fn main() {
     // let upload_sig = program.rpc().send_transaction(&transaction).unwrap();
     // println!("upload tx signature: {upload_sig}");
 
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    std::thread::sleep(std::time::Duration::from_secs(1));
     let metadata = program.account::<DataToBeSummoned>(metadata_pda).unwrap();
     assert_eq!(metadata.data, data, "data");
     println!("\nData uploaded from sdrive to solana by clockwork plugin");
