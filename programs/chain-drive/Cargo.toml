@@ -19,6 +19,6 @@ default = []
 [dependencies]
 anchor-lang = "0.26.0"
 chrono = { version = "0.4.23", default-features = false }
-clockwork-sdk = {path = "../../../clockwork/sdk"}
-clockwork-cron = {path = "../../../clockwork/cron"}
+clockwork-sdk = {git = "https://github.com/genesysgo/clockwork.git"}
+clockwork-cron = {git = "https://github.com/genesysgo/clockwork.git"}
 sha2 = "0.10.6"
