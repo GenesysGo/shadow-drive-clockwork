@@ -56,4 +56,11 @@ impl DataToBeSummoned {
     pub fn build_source(storage_account: &Pubkey, filename: &str) -> String {
         format!("{SDRIVE_OBJECT_PREFIX}/{}/{}", storage_account, filename)
     }
+    pub fn get_pda(summoner: &Pubkey, storage_account: &Pubkey, name: &str) -> Pubkey {
+        Pubkey::find_program_address(
+            &[summoner.as_ref(), storage_account.as_ref(), name.as_ref()],
+            &crate::ID,
+        )
+        .0
+    }
 }
