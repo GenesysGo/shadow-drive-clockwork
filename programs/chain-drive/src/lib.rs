@@ -154,38 +154,12 @@ pub enum PortalError {
     InvalidHash,
 }
 
-#[derive(Accounts)]
-pub struct X {}
-
 #[test]
-fn try_cron() {
-    for time in (0..1_000_000_000).step_by(10_000_000) {
-        for offset in 1..10 {
-            let schedule = get_next_n_minutes_schedule(time, offset);
-            fn next_timestamp(after: i64, schedule: String) -> Option<i64> {
-                Schedule::from_str(&schedule)
-                    .unwrap()
-                    .next_after(&DateTime::<Utc>::from_utc(
-                        NaiveDateTime::from_timestamp(after, 0),
-                        Utc,
-                    ))
-                    .take()
-                    .map(|datetime| datetime.timestamp())
-            };
-
-            let expected = time + offset * 60;
-
-            assert_eq!(
-                expected,
-                next_timestamp(time, schedule).unwrap(),
-                "failed at time = {time}, offset = {offset}"
-            )
-        }
-    }
-}
-
-#[test]
+#[allow(deprecated)]
 fn try_cron_seconds() {
+    use chrono::*;
+    use clockwork_cron::*;
+    use std::str::FromStr;
     for time in (0..1_000_000_000).step_by(10_000_000) {
         for offset in 1..10 {
             let schedule = get_next_n_seconds_schedule(time, offset);
@@ -209,14 +183,6 @@ fn try_cron_seconds() {
             )
         }
     }
-}
-
-#[inline(always)]
-fn get_next_n_minutes_schedule(unix_timestamp: i64, n_minutes: i64) -> String {
-    let later = unix_timestamp + n_minutes * 60;
-    let second_place = later % 60;
-    let minute_place = (later / 60) % 60;
-    format!("{second_place} {minute_place} * * * * *")
 }
 
 #[inline(always)]
