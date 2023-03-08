@@ -113,7 +113,7 @@ pub mod chain_drive {
         let clockwork_delete_ix: ClockworkInstructionData = delete_ix.into();
         instructions.push(clockwork_delete_ix);
 
-        let upload_trigger = Trigger::Cron {
+        let delete_trigger = Trigger::Cron {
             schedule: get_next_n_seconds_schedule(clock.unix_timestamp, TIME_DELAY_SECS),
             skippable: false,
         };
@@ -129,7 +129,7 @@ pub mod chain_drive {
             DELETE_TX_FEE,
             metadata_key,
             instructions,
-            upload_trigger,
+            delete_trigger,
         )?;
 
         Ok(())
