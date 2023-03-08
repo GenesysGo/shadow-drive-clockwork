@@ -7,6 +7,9 @@ use clockwork_sdk::state::Thread;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
+// TODO: write helper function that automatically generates "TEST" vars from local data (automatically uploads to gg,
+// retrieves the TEST vars, and summons)
+
 static TEST_HASH: [u8; 32] = [
     209, 188, 141, 59, 164, 175, 199, 225, 9, 97, 44, 183, 58, 203, 221, 218, 192, 82, 201, 48, 37,
     170, 31, 130, 148, 46, 218, 187, 125, 235, 130, 161,
@@ -27,15 +30,15 @@ pub mod chain_drive_demo {
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         // cpi
-        let signer_seeds = &[];
-        let cpi_ctx = CpiContext::<chain_drive::cpi::accounts::Summon>::new_with_signer(
+        // let signer_seeds = &[];
+        let cpi_ctx = CpiContext::<chain_drive::cpi::accounts::Summon>::new(
             ctx.accounts.portal_program.to_account_info(),
             chain_drive::cpi::accounts::Summon {
                 summoner: ctx.accounts.signer.to_account_info(),
                 metadata: ctx.accounts.metadata.to_account_info(),
                 system_program: ctx.accounts.system_program.to_account_info(),
             },
-            signer_seeds,
+            // signer_seeds,
         );
 
         let callback = ClockworkInstructionData {

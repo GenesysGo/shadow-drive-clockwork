@@ -19,4 +19,4 @@ default = []
 [dependencies]
 anchor-lang = "0.26.0"
 chain-drive = { path = "../chain-drive" , features = ["cpi"]}
-clockwork-sdk = {path = "../../../clockwork/sdk"}
+clockwork-sdk = {git = "https://github.com/genesysgo/clockwork.git", branch = "sdrive"}
