@@ -2,6 +2,7 @@
 members = [
     "programs/*",
     "tests",
+    "graph-demo",
 ]
 
 [profile.release]

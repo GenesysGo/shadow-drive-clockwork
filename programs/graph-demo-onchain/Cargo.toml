@@ -1,0 +1,24 @@
+[package]
+name = "graph-demo-onchain"
+version = "0.1.0"
+description = "Created with Anchor"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "graph_demo"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "0.26.0"
+sha2 = "0.10.6"
+chain-drive = { path = "../chain-drive" }
+graph-demo = { path = "../../graph-demo" }
+runes = { path = "../../../shadow-drive-rust/runes/" }
+rkyv = "0.7.40"
