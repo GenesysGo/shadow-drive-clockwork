@@ -11,13 +11,13 @@ declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 // retrieves the TEST vars, and summons)
 
 static TEST_HASH: [u8; 32] = [
-    209, 188, 141, 59, 164, 175, 199, 225, 9, 97, 44, 183, 58, 203, 221, 218, 192, 82, 201, 48, 37,
-    170, 31, 130, 148, 46, 218, 187, 125, 235, 130, 161,
+    209, 188, 141, 59, 164, 175, 199, 225, 9, 97, 44, 183, 58, 203, 221, 218,
+    192, 82, 201, 48, 37, 170, 31, 130, 148, 46, 218, 187, 125, 235, 130, 161,
 ];
 
 static TEST_ACCOUNT: Pubkey = Pubkey::new_from_array([
-    59, 253, 10, 18, 239, 63, 40, 166, 47, 100, 57, 4, 43, 249, 250, 182, 166, 163, 114, 130, 137,
-    30, 240, 193, 124, 9, 70, 43, 214, 226, 155, 163,
+    59, 253, 10, 18, 239, 63, 40, 166, 47, 100, 57, 4, 43, 249, 250, 182, 166,
+    163, 114, 130, 137, 30, 240, 193, 124, 9, 70, 43, 214, 226, 155, 163,
 ]);
 
 static TEST_FILE: &'static str = "test.txt";
@@ -35,6 +35,7 @@ pub mod chain_drive_demo {
             ctx.accounts.portal_program.to_account_info(),
             chain_drive::cpi::accounts::Summon {
                 summoner: ctx.accounts.signer.to_account_info(),
+                payer: ctx.accounts.signer.to_account_info(),
                 metadata: ctx.accounts.metadata.to_account_info(),
                 system_program: ctx.accounts.system_program.to_account_info(),
             },
@@ -49,12 +50,16 @@ pub mod chain_drive_demo {
             )],
             data: crate::instruction::Print {}.data(),
         };
+
+        let unique_thread = 0;
         chain_drive::cpi::summon(
             cpi_ctx,
             TEST_ACCOUNT,
             TEST_FILE.to_string(),
             TEST_LEN,
             TEST_HASH,
+            0,
+            unique_thread,
             Some(callback),
         )?;
 

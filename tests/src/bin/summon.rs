@@ -14,16 +14,17 @@ use anchor_client::{
 };
 
 use chain_drive::{
-    constants::TIME_DELAY_SECS, instruction::Upload, instructions::summon::DataToBeSummoned,
-    ID as PROGRAM_ID,
+    constants::TIME_DELAY_SECS, instruction::Upload,
+    instructions::summon::DataToBeSummoned, ID as PROGRAM_ID,
 };
 use clockwork_sdk::state::Thread;
 use sha2::{Digest, Sha256};
 
 fn main() {
     // Get dev and mint key.
-    let dev_key: Rc<Keypair> =
-        Rc::new(read_keypair_file("dev.json").expect("Example requires a keypair file"));
+    let dev_key: Rc<Keypair> = Rc::new(
+        read_keypair_file("dev.json").expect("Example requires a keypair file"),
+    );
 
     // Get client, program, and rpc client
     let url: Cluster = Cluster::Localnet;
@@ -35,13 +36,18 @@ fn main() {
     let program: Program = client.program(PROGRAM_ID);
 
     // Instruction arguments
-    let storage_account = Pubkey::from_str("53AqvNpBsk3wci9do6buRwaRr3spLZE1ySNfEYxMZEqG").unwrap();
+    let storage_account =
+        Pubkey::from_str("53AqvNpBsk3wci9do6buRwaRr3spLZE1ySNfEYxMZEqG")
+            .unwrap();
     println!("storage account {:?}", storage_account.to_bytes());
     let filename = "test.txt";
-    let data = reqwest::blocking::get(DataToBeSummoned::build_source(&storage_account, &filename))
-        .unwrap()
-        .bytes()
-        .unwrap();
+    let data = reqwest::blocking::get(DataToBeSummoned::build_source(
+        &storage_account,
+        &filename,
+    ))
+    .unwrap()
+    .bytes()
+    .unwrap();
     let mut hasher = Sha256::new();
     hasher.update(&data);
     let hash: [u8; 32] = hasher.finalize().try_into().unwrap();
@@ -67,6 +73,7 @@ fn main() {
         .request()
         .accounts(chain_drive::accounts::Summon {
             summoner: dev_key.pubkey(),
+            payer: dev_key.pubkey(),
             metadata: metadata_pda,
             system_program: system_program::ID,
             // sdrive_automation,
@@ -78,6 +85,7 @@ fn main() {
             callback: None,
             hash,
             data_len,
+            extra_lamports: 0,
         })
         .signer(&*dev_key)
         .send()
@@ -135,7 +143,7 @@ fn main() {
     // let upload_sig = program.rpc().send_transaction(&transaction).unwrap();
     // println!("upload tx signature: {upload_sig}");
 
-    std::thread::sleep(std::time::Duration::from_secs(1));
+    // std::thread::sleep(std::time::Duration::from_secs());
     let metadata = program.account::<DataToBeSummoned>(metadata_pda).unwrap();
     assert_eq!(metadata.data, data, "data");
     println!("\nData uploaded from sdrive to solana by clockwork plugin");
@@ -159,7 +167,9 @@ fn main() {
 
     // assert!(program.account::<DataToBeSummoned>(metadata_pda).is_err());
 
-    std::thread::sleep(std::time::Duration::from_secs(TIME_DELAY_SECS as u64 + 1));
+    std::thread::sleep(std::time::Duration::from_secs(
+        TIME_DELAY_SECS as u64 + 1,
+    ));
     assert!(
         program.account::<DataToBeSummoned>(metadata_pda).is_err(),
         "account should be deleted by clockwork thread"

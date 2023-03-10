@@ -21,7 +21,8 @@ pub struct Upload<'info> {
 
     #[account(
         mut,
-        address = Thread::pubkey(metadata.key(), metadata.key().to_bytes().to_vec())
+        // address = Thread::pubkey(metadata.key(), metadata.key().to_bytes().to_vec())
+        address = Thread::pubkey(metadata.key(), metadata.unique_thread.to_le_bytes().to_vec())
     )]
     pub sdrive_automation: SystemAccount<'info>,
 

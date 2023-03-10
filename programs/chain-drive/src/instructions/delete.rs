@@ -7,7 +7,8 @@ pub struct Delete<'info> {
     pub uploader: SystemAccount<'info>,
 
     #[account(mut)]
-    pub summoner: SystemAccount<'info>,
+    /// CHECK: must match key in metadata
+    pub summoner: AccountInfo<'info>,
 
     #[account(
         mut,

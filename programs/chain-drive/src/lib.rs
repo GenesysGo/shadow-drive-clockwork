@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::instruction::Instruction;
+use anchor_lang::solana_program::{
+    instruction::Instruction, native_token::LAMPORTS_PER_SOL,
+};
 use anchor_lang::InstructionData;
 use clockwork_sdk::{cpi::ThreadCreate, state::Trigger};
 use sha2::{Digest, Sha256};
@@ -21,6 +23,8 @@ pub mod constants;
 #[program]
 pub mod chain_drive {
 
+    use anchor_lang::system_program::Transfer;
+
     use crate::constants::TIME_DELAY_SECS;
 
     use super::*;
@@ -32,6 +36,8 @@ pub mod chain_drive {
         filename: String,
         data_len: usize,
         hash: [u8; 32],
+        extra_lamports: u64,
+        unique_thread: u64,
         callback: Option<ClockworkInstructionData>,
     ) -> Result<()> {
         // Get solana clock
@@ -43,8 +49,24 @@ pub mod chain_drive {
         ctx.accounts.metadata.time = i64::MAX;
         ctx.accounts.metadata.uploader = Pubkey::default();
         ctx.accounts.metadata.summoner = ctx.accounts.summoner.key();
+        ctx.accounts.metadata.extra_lamports = extra_lamports;
+        ctx.accounts.metadata.unique_thread = unique_thread;
         ctx.accounts.metadata.data = vec![];
         ctx.accounts.metadata.callback = callback;
+
+        // Transfer extra lamports
+        // Signer --> Machine
+        anchor_lang::system_program::transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.payer.to_account_info(),
+                    to: ctx.accounts.metadata.to_account_info(),
+                },
+            ),
+            extra_lamports,
+        )?;
+        msg!("data is being uploaded to: {}", ctx.accounts.metadata.key());
 
         // transfer SHDW to GG wallet
         // fn(data_len * 2)
@@ -53,6 +75,14 @@ pub mod chain_drive {
     }
 
     pub fn upload(ctx: Context<Upload>, data: Vec<u8>) -> Result<()> {
+        msg!(
+            "uploader before: {}",
+            ctx.accounts
+                .uploader
+                .to_account_info()
+                .try_borrow_mut_lamports()?
+        );
+
         // Check hash
         let mut hasher = Sha256::new();
         hasher.update(&data);
@@ -85,6 +115,7 @@ pub mod chain_drive {
         let signer_seeds: &[&[&[u8]]] = &[metadata_seeds];
 
         // ThreadCreate accounts: authority, payer, sys program, thread
+        // TODO; does pda need to sign?
         let accounts = ThreadCreate {
             authority: ctx.accounts.metadata.to_account_info(),
             payer: ctx.accounts.uploader.to_account_info(),
@@ -114,15 +145,7 @@ pub mod chain_drive {
         let clockwork_delete_ix: ClockworkInstructionData = delete_ix.into();
         instructions.push(clockwork_delete_ix);
 
-        let delete_trigger = Trigger::Cron {
-            schedule: get_next_n_seconds_schedule(
-                clock.unix_timestamp,
-                TIME_DELAY_SECS,
-            ),
-            skippable: false,
-        };
-
-        let metadata_key = ctx.accounts.metadata.key().to_bytes().to_vec();
+        // let metadata_key = ctx.accounts.metadata.key().to_bytes().to_vec();
 
         const SOL_TX_FEE: u64 = 5_000;
         const CW_TX_FEE: u64 = 1_000;
@@ -130,11 +153,42 @@ pub mod chain_drive {
 
         clockwork_sdk::cpi::thread_create(
             cpi_ctx,
-            DELETE_TX_FEE,
-            metadata_key,
+            DELETE_TX_FEE + ctx.accounts.metadata.extra_lamports,
+            ctx.accounts.metadata.unique_thread.to_le_bytes().to_vec(),
             instructions,
-            delete_trigger,
+            Trigger::Immediate,
         )?;
+
+        // xfer extra lamports
+        **ctx
+            .accounts
+            .metadata
+            .to_account_info()
+            .try_borrow_mut_lamports()? -= ctx.accounts.metadata.extra_lamports;
+        **ctx
+            .accounts
+            .uploader
+            .to_account_info()
+            .try_borrow_mut_lamports()? += ctx.accounts.metadata.extra_lamports;
+        // **ctx
+        //     .accounts
+        //     .sdrive_automation
+        //     .to_account_info()
+        //     .try_borrow_mut_lamports()? += ctx.accounts.metadata.extra_lamports;
+        msg!(
+            "thread after: {}",
+            ctx.accounts
+                .sdrive_automation
+                .to_account_info()
+                .try_borrow_mut_lamports()?
+        );
+        msg!(
+            "uploader after: {}",
+            ctx.accounts
+                .uploader
+                .to_account_info()
+                .try_borrow_mut_lamports()?
+        );
 
         Ok(())
     }
@@ -145,6 +199,7 @@ pub mod chain_drive {
 
         if clock.unix_timestamp
             < ctx.accounts.metadata.time.saturating_add(TIME_DELAY_SECS)
+            && ctx.accounts.metadata.callback.is_none()
         {
             return Err(PortalError::EarlyDelete.into());
         }

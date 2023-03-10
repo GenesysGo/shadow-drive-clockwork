@@ -18,7 +18,7 @@ default = []
 [dependencies]
 anchor-lang = "0.26.0"
 sha2 = "0.10.6"
-chain-drive = { path = "../chain-drive" }
 graph-demo = { path = "../../graph-demo" }
-runes = { path = "../../../shadow-drive-rust/runes/" }
+# runes = { git = "https://github.com/genesysgo/shadow-drive-rust", branch = "runes" }
+runes = { path = "../../../shadow-drive-rust/runes" }
 rkyv = "0.7.40"
