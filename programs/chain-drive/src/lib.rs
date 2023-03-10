@@ -4,7 +4,7 @@ use anchor_lang::InstructionData;
 use clockwork_sdk::{cpi::ThreadCreate, state::Trigger};
 use sha2::{Digest, Sha256};
 
-pub use clockwork_sdk::state::InstructionData as ClockworkInstructionData;
+pub use clockwork_sdk;
 
 declare_id!("G6xPudzNNM8CwfLHC9ByzrF67LcwyiRe4t9vHg34eqpR");
 
@@ -112,7 +112,10 @@ pub mod chain_drive {
         instructions.push(clockwork_delete_ix);
 
         let delete_trigger = Trigger::Cron {
-            schedule: get_next_n_seconds_schedule(clock.unix_timestamp, TIME_DELAY_SECS),
+            schedule: get_next_n_seconds_schedule(
+                clock.unix_timestamp,
+                TIME_DELAY_SECS,
+            ),
             skippable: false,
         };
 
@@ -137,7 +140,9 @@ pub mod chain_drive {
         // Get solana clock
         let clock = Clock::get()?;
 
-        if clock.unix_timestamp < ctx.accounts.metadata.time.saturating_add(TIME_DELAY_SECS) {
+        if clock.unix_timestamp
+            < ctx.accounts.metadata.time.saturating_add(TIME_DELAY_SECS)
+        {
             return Err(PortalError::EarlyDelete.into());
         }
         Ok(())
