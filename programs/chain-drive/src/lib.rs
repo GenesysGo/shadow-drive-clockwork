@@ -4,7 +4,9 @@ use anchor_lang::InstructionData;
 use clockwork_sdk::{cpi::ThreadCreate, state::Trigger};
 use sha2::{Digest, Sha256};
 
-pub use clockwork_sdk;
+pub use clockwork_sdk::{
+    self, state::InstructionData as ClockworkInstructionData,
+};
 
 declare_id!("G6xPudzNNM8CwfLHC9ByzrF67LcwyiRe4t9vHg34eqpR");
 
