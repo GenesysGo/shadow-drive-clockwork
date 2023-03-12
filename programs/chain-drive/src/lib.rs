@@ -15,10 +15,12 @@ declare_id!("G6xPudzNNM8CwfLHC9ByzrF67LcwyiRe4t9vHg34eqpR");
 
 pub mod instructions;
 use instructions::delete::*;
+use instructions::init::*;
 use instructions::summon::*;
+use instructions::update::*;
 use instructions::upload::*;
 
-pub mod constants;
+pub use instructions::init::{portal_config, PortalConfig};
 
 #[program]
 pub mod chain_drive {
@@ -179,12 +181,28 @@ pub mod chain_drive {
         }
         Ok(())
     }
+
+    pub fn init(ctx: Context<Init>) -> Result<()> {
+        msg!("Initializing portal program with {} as admin and with a {} shades per byte fee", ADMIN, INIT_FEE);
+        ctx.accounts.config.admin = Pubkey::from_str(ADMIN).unwrap();
+        ctx.accounts.config.shades_per_byte = INIT_FEE;
+
+        Ok(())
+    }
+
+    pub fn update(ctx: Context<Update>, fee: u64) -> Result<()> {
+        msg!("updating fee to {} shades per byte", fee);
+        ctx.accounts.config.shades_per_byte = fee;
+
+        Ok(())
+    }
 }
 
 #[error_code]
 pub enum PortalError {
     #[msg("you tried to delete the data too early")]
     EarlyDelete,
+
     #[msg("you tried to upload data with incorrect hash")]
     InvalidHash,
 }
