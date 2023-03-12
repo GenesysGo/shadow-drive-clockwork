@@ -212,10 +212,10 @@ pub struct SummonNext<'info> {
 
 #[account]
 pub struct Machine {
-    counter: u64,
-    hash: [u8; 32],
-    admin: Pubkey,
-    next: String,
+    pub counter: u64,
+    pub hash: [u8; 32],
+    pub admin: Pubkey,
+    pub next: String,
 }
 
 fn get_hash_callback(metadata: Pubkey) -> ClockworkInstructionData {
