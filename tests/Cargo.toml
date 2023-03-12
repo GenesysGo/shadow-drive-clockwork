@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 anchor-client = "0.26.0"
+anchor-spl = "0.26.0"
 reqwest = "0.11.14"
 clockwork-sdk = {path = "../../clockwork/sdk"}
 sha2 = "0.10.6"
@@ -15,3 +16,4 @@ chain-drive = { path = "../programs/chain-drive/", features = ["no-entrypoint"] 
 chain-drive-demo = { path = "../programs/chain-drive-demo/", features = ["no-entrypoint"] }
 rkyv = "0.7.40"
 graph-demo-onchain = { path = "../programs/graph-demo-onchain/", features = ["no-entrypoint"] }
+base58 = "0.2.0"
