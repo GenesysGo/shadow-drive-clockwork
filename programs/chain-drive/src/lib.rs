@@ -23,10 +23,6 @@ pub mod constants;
 #[program]
 pub mod chain_drive {
 
-    use anchor_lang::system_program::Transfer;
-
-    use crate::constants::TIME_DELAY_SECS;
-
     use super::*;
 
     #[allow(unused)]
@@ -36,42 +32,20 @@ pub mod chain_drive {
         filename: String,
         data_len: usize,
         hash: [u8; 32],
-        extra_lamports: u64,
-        unique_thread: u64,
         callback: Option<ClockworkInstructionData>,
+        unique_thread: Option<u64>,
+        extra_lamports: u64,
     ) -> Result<()> {
-        // Get solana clock
-        let clock = Clock::get()?;
-
-        ctx.accounts.metadata.hash = hash;
-        ctx.accounts.metadata.storage_account = storage_account;
-        ctx.accounts.metadata.filename = filename.clone();
-        ctx.accounts.metadata.time = i64::MAX;
-        ctx.accounts.metadata.uploader = Pubkey::default();
-        ctx.accounts.metadata.summoner = ctx.accounts.summoner.key();
-        ctx.accounts.metadata.extra_lamports = extra_lamports;
-        ctx.accounts.metadata.unique_thread = unique_thread;
-        ctx.accounts.metadata.data = vec![];
-        ctx.accounts.metadata.callback = callback;
-
-        // Transfer extra lamports
-        // Signer --> Machine
-        anchor_lang::system_program::transfer(
-            CpiContext::new(
-                ctx.accounts.system_program.to_account_info(),
-                Transfer {
-                    from: ctx.accounts.payer.to_account_info(),
-                    to: ctx.accounts.metadata.to_account_info(),
-                },
-            ),
+        instructions::summon::handler(
+            ctx,
+            storage_account,
+            filename,
+            data_len,
+            hash,
+            callback,
+            unique_thread,
             extra_lamports,
-        )?;
-        msg!("data is being uploaded to: {}", ctx.accounts.metadata.key());
-
-        // transfer SHDW to GG wallet
-        // fn(data_len * 2)
-
-        Ok(())
+        )
     }
 
     pub fn upload(ctx: Context<Upload>, data: Vec<u8>) -> Result<()> {
