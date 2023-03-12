@@ -1,25 +1,22 @@
-use std::rc::Rc;
+use std::{error::Error, rc::Rc, time::Duration};
 
 use anchor_client::{
     anchor_lang::system_program,
-    solana_client::rpc_config::RpcSendTransactionConfig,
     solana_sdk::{
         commitment_config::CommitmentConfig,
         pubkey::Pubkey,
-        signature::{read_keypair_file, Signature},
+        signature::read_keypair_file,
         signature::{Keypair, Signer},
     },
     Client, Cluster, Program,
 };
+use base58::ToBase58;
+use graph_demo::{machine, Machine};
+use runes::inscribe_runes;
 
-use chain_drive::{
-    clockwork_sdk::state::Thread, instructions::summon::DataToBeSummoned,
-};
-use graph_demo::machine;
+inscribe_runes!("../../../graph-demo/nodes/nodes.runes");
 
-runes::inscribe_runes!("../../../graph-demo/nodes/nodes.runes");
-
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     // Get dev and mint key.
     let dev_key: Rc<Keypair> = Rc::new(
         read_keypair_file("dev.json").expect("Example requires a keypair file"),
@@ -37,11 +34,10 @@ fn main() {
     // Instruction arguments
     let storage_account = unsafe { get_runes().storage_account };
 
-    // Get first metadata PDA
+    // Get first metadata PDA (for Alice)
     let metadata_pda: Pubkey = Pubkey::find_program_address(
         &[
             machine().as_ref(),
-            // dev_key.pubkey().as_ref(),
             storage_account.as_ref(),
             "Alice".as_ref(),
         ],
@@ -49,29 +45,37 @@ fn main() {
     )
     .0;
 
-    // Construct and send summon instruction
-    let summon_sig: Signature = match program
+    // Construct and send initial kickoff instruction
+    program
         .request()
         .accounts(graph_demo::accounts::Initialize {
             admin: dev_key.pubkey(),
             machine: machine(),
             metadata: metadata_pda,
-            // thread: Thread::pubkey(machine(), b"graph".to_vec()),
-            // thread_program: clockwork_sdk::ID,
             portal_program: chain_drive::ID,
             system_program: system_program::ID,
         })
         .args(graph_demo::instruction::Initialize {})
         .signer(&*dev_key)
-        .send()
-        // .send_with_spinner_and_config(RpcSendTransactionConfig {
-        //     skip_preflight: true,
-        //     ..RpcSendTransactionConfig::default()
-        // }) 
-        {
-            Ok(sig) => sig,
-            Err(e) => panic!("{e:#?}"),
-        };
-    let metadata: DataToBeSummoned = program.account(metadata_pda).unwrap();
-    println!("{metadata:#?}");
+        .send()?;
+
+    let mut counter = 0;
+    let mut last_counter = u64::MAX;
+    while counter < 100 {
+        let machine: Machine = program.account(machine()).unwrap();
+        counter = machine.counter;
+        if counter != last_counter {
+            last_counter = counter;
+            println!(
+                "state: counter = {}; hash = {}; next = {}; ",
+                machine.counter,
+                machine.hash.to_base58(),
+                &machine.next
+            );
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    println!("exiting");
+
+    Ok(())
 }
