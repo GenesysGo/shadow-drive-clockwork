@@ -1,79 +1,107 @@
-use std::{rc::Rc, str::FromStr};
+use std::{error::Error, path::PathBuf, rc::Rc, str::FromStr};
 
 use anchor_client::{
-    anchor_lang::{solana_program, system_program, Id, InstructionData},
+    anchor_lang::system_program,
     solana_sdk::{
         commitment_config::CommitmentConfig,
-        instruction::{AccountMeta, Instruction},
         pubkey::Pubkey,
-        signature::{read_keypair_file, Signature},
+        signature::read_keypair_file,
         signature::{Keypair, Signer},
-        transaction::Transaction,
     },
     Client, Cluster, Program,
 };
 
-use chain_drive::{
-    constants::TIME_DELAY_SECS, instruction::Upload, instructions::summon::DataToBeSummoned,
-};
-use chain_drive_demo::ID as PROGRAM_ID;
-use clockwork_sdk::state::Thread;
-use sha2::{Digest, Sha256};
+use anchor_spl::token;
+use chain_drive::{instructions::init::portal_config, PortalConfig};
+use shadow_portal_tests::mock_shdw_mint;
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     // Get dev and mint key.
-    let dev_key: Rc<Keypair> =
-        Rc::new(read_keypair_file("dev.json").expect("Example requires a keypair file"));
+    let admin_key: Rc<Keypair> = Rc::new(
+        read_keypair_file(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .unwrap()
+                .join("admin.json"),
+        )
+        .expect("example requires a keypair"),
+    );
+    let admin_ata = mock_shdw_mint(Rc::clone(&admin_key) as Rc<dyn Signer>)?;
 
     // Get client, program, and rpc client
     let url: Cluster = Cluster::Localnet;
     let client: Client = Client::new_with_options(
         url,
-        Rc::clone(&dev_key) as Rc<dyn Signer>,
+        Rc::clone(&admin_key) as Rc<dyn Signer>,
         CommitmentConfig::processed(),
     );
-    let program: Program = client.program(PROGRAM_ID);
+    let portal_program: Program = client.program(chain_drive::ID);
+    let user_program: Program = client.program(chain_drive_demo::ID);
+
+    if let Err(e) = portal_program
+        .request()
+        .accounts(chain_drive::accounts::Init {
+            payer: admin_key.pubkey(),
+            config: portal_config(),
+            system_program: system_program::ID,
+        })
+        .args(chain_drive::instruction::Init {})
+        .send()
+    {
+        panic!("failed to initialize portal config {e:#?}");
+    }
+    let portal_config_account: PortalConfig =
+        portal_program.account(portal_config())?;
+    assert_eq!(
+        portal_config_account.admin,
+        chain_drive::payout_authority::ID
+    );
+    assert_eq!(portal_config_account.shades_per_byte, chain_drive::INIT_FEE);
 
     // Instruction arguments
-    let storage_account = Pubkey::from_str("53AqvNpBsk3wci9do6buRwaRr3spLZE1ySNfEYxMZEqG").unwrap();
+    let storage_account =
+        Pubkey::from_str("53AqvNpBsk3wci9do6buRwaRr3spLZE1ySNfEYxMZEqG")
+            .unwrap();
     println!("storage account {:?}", storage_account.to_bytes());
     let filename = "test.txt";
-    let data = reqwest::blocking::get(DataToBeSummoned::build_source(&storage_account, &filename))
-        .unwrap()
-        .bytes()
-        .unwrap();
-    let mut hasher = Sha256::new();
-    hasher.update(&data);
-    let hash: [u8; 32] = hasher.finalize().try_into().unwrap();
-    println!("{hash:?}");
-    let slot_delay = 0;
-    let data_len = data.len();
 
     // Get metadata PDA
     let metadata_pda: Pubkey = Pubkey::find_program_address(
         &[
-            dev_key.pubkey().as_ref(),
+            admin_key.pubkey().as_ref(),
             storage_account.as_ref(),
             filename.as_ref(),
         ],
         &chain_drive::ID,
     )
     .0;
-    let automation_id = metadata_pda.to_bytes().to_vec();
-    let sdrive_automation: Pubkey = Thread::pubkey(metadata_pda, automation_id);
+    let shdw_vault: Pubkey = Pubkey::find_program_address(
+        &[metadata_pda.as_ref()],
+        &chain_drive::ID,
+    )
+    .0;
 
     // Construct and send summon instruction
-    let summon_sig: Signature = program
+    let portal_config_info = user_program.rpc().get_account(&portal_config())?;
+    println!("portal config is owned by {}", portal_config_info.owner);
+    if let Err(e) = user_program
         .request()
         .accounts(chain_drive_demo::accounts::Initialize {
-            signer: dev_key.pubkey(),
+            summoner: admin_key.pubkey(),
+            summoner_token_account: admin_ata,
             metadata: metadata_pda,
-            system_program: system_program::ID,
+            config: portal_config(),
+            shdw_vault,
+            shdw_mint: chain_drive::shdw::ID,
             portal_program: chain_drive::ID,
+            token_program: token::ID,
+            system_program: system_program::ID,
         })
         .args(chain_drive_demo::instruction::Initialize {})
-        .signer(&*dev_key)
+        .signer(&*admin_key)
         .send()
-        .unwrap();
-    println!("summon tx signature: {summon_sig}");
+    {
+        panic!("kickoff ix failed: {e:#?}");
+    }
+    Ok(())
 }

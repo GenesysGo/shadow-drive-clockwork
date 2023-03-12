@@ -17,3 +17,4 @@ chain-drive-demo = { path = "../programs/chain-drive-demo/", features = ["no-ent
 rkyv = "0.7.40"
 graph-demo-onchain = { path = "../programs/graph-demo-onchain/", features = ["no-entrypoint"] }
 base58 = "0.2.0"
+spl-associated-token-account = "1.0.5"
