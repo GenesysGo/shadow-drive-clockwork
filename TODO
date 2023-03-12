@@ -1,0 +1,11 @@
+- [ ] upload does not go through threadexec, pay out thread correct amount
+- [ ] update upload ix on clockwork worker
+- [ ] metadata -> portal, DataToBeSummoned -> Portal
+- [ ] delete ix doesn't need uploader
+- [ ] time not necessary, now using 
+- [ ] optional unique thread id
+- [ ] summon cpi for pdas -- revert payer & summoner to prevent dos attacks
+- [ ] rename chain drive to portal-program
+- [ ] rename repo to portal-program
+- [ ] rename shdw_vault
+- [ ] clean get next n seconds schedule
