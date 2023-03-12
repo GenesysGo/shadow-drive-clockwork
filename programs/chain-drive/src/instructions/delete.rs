@@ -14,9 +14,12 @@ pub struct Delete<'info> {
         mut,
         close = summoner,
         seeds = [
-            metadata.summoner.as_ref(),
+            metadata.summoner.key().as_ref(),
             metadata.storage_account.as_ref(),
-            metadata.filename.as_ref(),
+            // this is embarassing
+            metadata.unique_thread.map(|id| 
+                id.to_le_bytes().to_vec()
+            ).unwrap_or(<str as AsRef<[u8]>>::as_ref(metadata.filename.as_ref()).to_vec()).as_ref(),
         ],
         bump,
     )]

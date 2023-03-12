@@ -1,8 +1,10 @@
+use std::str::FromStr;
+
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::{
-    instruction::Instruction, native_token::LAMPORTS_PER_SOL,
-};
 use anchor_lang::InstructionData;
+use anchor_lang::{
+    solana_program::instruction::Instruction, system_program::Transfer,
+};
 use clockwork_sdk::{cpi::ThreadCreate, state::Trigger};
 use sha2::{Digest, Sha256};
 
@@ -11,9 +13,13 @@ pub use clockwork_sdk::{
     state::{AccountMetaData, InstructionData as ClockworkInstructionData},
 };
 
+use crate::constants::TIME_DELAY_SECS;
+
 declare_id!("G6xPudzNNM8CwfLHC9ByzrF67LcwyiRe4t9vHg34eqpR");
 
+pub mod constants;
 pub mod instructions;
+pub use constants::*;
 use instructions::delete::*;
 use instructions::init::*;
 use instructions::summon::*;
@@ -50,6 +56,8 @@ pub mod chain_drive {
         )
     }
 
+    /// NOTE: this instruction is executed with a worker (clockwork or otherwise)
+    /// as a payer. We must redeem all SOL paid out by the worker + their fee.
     pub fn upload(ctx: Context<Upload>, data: Vec<u8>) -> Result<()> {
         msg!(
             "uploader before: {}",
@@ -74,6 +82,8 @@ pub mod chain_drive {
         ctx.accounts.metadata.data = data;
         ctx.accounts.metadata.uploaded = true;
 
+        // If there is a callback present, initializes the kickoff instructions vector with it
+        // This happens way up here due to borrow rules when constructing signer_seeds
         let callback_present = ctx.accounts.metadata.callback.is_some();
         let mut instructions = if callback_present {
             vec![ctx.accounts.metadata.callback.take().unwrap()]
@@ -81,17 +91,53 @@ pub mod chain_drive {
             vec![]
         };
 
+        // Transfer SHDW to payout account and close metadata pda
         let metadata_bump: u8 = *ctx.bumps.get("metadata").unwrap();
+        let last_seed: Vec<u8> = ctx
+            .accounts
+            .metadata
+            .unique_thread
+            .map(|id| id.to_le_bytes().to_vec())
+            .unwrap_or(
+                <str as AsRef<[u8]>>::as_ref(
+                    ctx.accounts.metadata.filename.as_ref(),
+                )
+                .to_vec(),
+            );
         let metadata_seeds: &[&[u8]] = &[
             ctx.accounts.metadata.summoner.as_ref(),
             ctx.accounts.metadata.storage_account.as_ref(),
-            ctx.accounts.metadata.filename.as_ref(),
+            last_seed.as_ref(),
             &[metadata_bump],
         ];
         let signer_seeds: &[&[&[u8]]] = &[metadata_seeds];
+        #[cfg(feature = "verbose")]
+        msg!("transfering portal token pda");
+        anchor_spl::token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                anchor_spl::token::Transfer {
+                    from: ctx.accounts.metadata_token_account.to_account_info(),
+                    to: ctx.accounts.payout_account.to_account_info(),
+                    authority: ctx.accounts.metadata.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            ctx.accounts.metadata_token_account.amount,
+        )?;
+        #[cfg(feature = "verbose")]
+        msg!("closing portal token pda");
+        anchor_spl::token::close_account(CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            anchor_spl::token::CloseAccount {
+                account: ctx.accounts.metadata_token_account.to_account_info(),
+                destination: ctx.accounts.payout_account.to_account_info(),
+                authority: ctx.accounts.metadata.to_account_info(),
+            },
+            signer_seeds,
+        ))?;
 
         // ThreadCreate accounts: authority, payer, sys program, thread
-        // TODO; does pda need to sign?
         let accounts = ThreadCreate {
             authority: ctx.accounts.metadata.to_account_info(),
             payer: ctx.accounts.uploader.to_account_info(),
@@ -103,7 +149,6 @@ pub mod chain_drive {
             accounts,
             signer_seeds,
         );
-        drop(signer_seeds);
 
         // TODO SOL FROM METADATA TO UPLOADER
 
@@ -127,15 +172,28 @@ pub mod chain_drive {
         const CW_TX_FEE: u64 = 1_000;
         const DELETE_TX_FEE: u64 = SOL_TX_FEE + CW_TX_FEE;
 
+        #[cfg(feature = "verbose")]
+        msg!("creating thread");
         clockwork_sdk::cpi::thread_create(
             cpi_ctx,
             DELETE_TX_FEE + ctx.accounts.metadata.extra_lamports,
-            ctx.accounts.metadata.unique_thread.to_le_bytes().to_vec(),
+            // Vec<u8> id
+            ctx.accounts
+                .metadata
+                .unique_thread
+                .map(|id| id.to_le_bytes().to_vec())
+                .unwrap_or_else(|| {
+                    <str as AsRef<[u8]>>::as_ref(
+                        ctx.accounts.metadata.filename.as_ref(),
+                    )
+                    .to_vec()
+                }),
             instructions,
             Trigger::Immediate,
         )?;
 
         // xfer extra lamports
+        // TODO: redeem for all costs
         **ctx
             .accounts
             .metadata
@@ -146,11 +204,6 @@ pub mod chain_drive {
             .uploader
             .to_account_info()
             .try_borrow_mut_lamports()? += ctx.accounts.metadata.extra_lamports;
-        // **ctx
-        //     .accounts
-        //     .sdrive_automation
-        //     .to_account_info()
-        //     .try_borrow_mut_lamports()? += ctx.accounts.metadata.extra_lamports;
         msg!(
             "thread after: {}",
             ctx.accounts
@@ -175,7 +228,7 @@ pub mod chain_drive {
 
         if clock.unix_timestamp
             < ctx.accounts.metadata.time.saturating_add(TIME_DELAY_SECS)
-            && ctx.accounts.metadata.callback.is_none()
+            || ctx.accounts.metadata.callback.is_some()
         {
             return Err(PortalError::EarlyDelete.into());
         }

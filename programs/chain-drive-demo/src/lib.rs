@@ -1,9 +1,9 @@
 use anchor_lang::prelude::*;
 use anchor_lang::InstructionData;
+use anchor_spl::token::Token;
 use chain_drive::instructions::summon::DataToBeSummoned;
 use clockwork_sdk::state::AccountMetaData;
 use clockwork_sdk::state::InstructionData as ClockworkInstructionData;
-use clockwork_sdk::state::Thread;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
@@ -25,21 +25,25 @@ static TEST_LEN: usize = 5;
 
 #[program]
 pub mod chain_drive_demo {
-
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        // cpi
-        // let signer_seeds = &[];
         let cpi_ctx = CpiContext::<chain_drive::cpi::accounts::Summon>::new(
             ctx.accounts.portal_program.to_account_info(),
             chain_drive::cpi::accounts::Summon {
-                summoner: ctx.accounts.signer.to_account_info(),
-                payer: ctx.accounts.signer.to_account_info(),
+                summoner: ctx.accounts.summoner.to_account_info(),
+                summoner_token_account: ctx
+                    .accounts
+                    .summoner_token_account
+                    .to_account_info(),
+                payer: ctx.accounts.summoner.to_account_info(),
                 metadata: ctx.accounts.metadata.to_account_info(),
                 system_program: ctx.accounts.system_program.to_account_info(),
+                portal_config: ctx.accounts.config.to_account_info(),
+                shdw_mint: ctx.accounts.shdw_mint.to_account_info(),
+                shdw_vault: ctx.accounts.shdw_vault.to_account_info(),
+                token_program: ctx.accounts.token_program.to_account_info(),
             },
-            // signer_seeds,
         );
 
         let callback = ClockworkInstructionData {
@@ -51,16 +55,16 @@ pub mod chain_drive_demo {
             data: crate::instruction::Print {}.data(),
         };
 
-        let unique_thread = 0;
+        msg!("summoning");
         chain_drive::cpi::summon(
             cpi_ctx,
             TEST_ACCOUNT,
             TEST_FILE.to_string(),
             TEST_LEN,
             TEST_HASH,
-            0,
-            unique_thread,
             Some(callback),
+            None,
+            0,
         )?;
 
         Ok(())
@@ -69,7 +73,6 @@ pub mod chain_drive_demo {
     pub fn print(ctx: Context<Print>) -> Result<()> {
         msg!("{}", String::from_utf8_lossy(&ctx.accounts.metadata.data));
 
-        // ctx.accounts.thread.next_instruction = None;
         Ok(())
     }
 }
@@ -77,12 +80,27 @@ pub mod chain_drive_demo {
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(mut)]
-    pub signer: Signer<'info>,
+    pub summoner: Signer<'info>,
 
     #[account(mut)]
-    /// CHECK: Portal will do checks
-    pub metadata: AccountInfo<'info>,
+    /// CHECK: Portal Program will do checks
+    pub summoner_token_account: UncheckedAccount<'info>,
 
+    #[account(mut)]
+    /// CHECK: Portal Program will do checks
+    pub metadata: UncheckedAccount<'info>,
+
+    /// CHECK: Portal Program will do checks
+    pub config: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    /// CHECK: Portal Program will do checks
+    pub shdw_vault: UncheckedAccount<'info>,
+
+    /// CHECK: Portal Program will do checks
+    pub shdw_mint: UncheckedAccount<'info>,
+
+    pub token_program: Program<'info, Token>,
     pub portal_program: Program<'info, chain_drive::program::ChainDrive>,
     pub system_program: Program<'info, System>,
 }
@@ -90,8 +108,5 @@ pub struct Initialize<'info> {
 #[derive(Accounts)]
 pub struct Print<'info> {
     #[account()]
-    /// TODO: ensure this is the right account
     pub metadata: Account<'info, DataToBeSummoned>,
-    // #[account(mut)]
-    // pub thread: Account<'info, Thread>,
 }

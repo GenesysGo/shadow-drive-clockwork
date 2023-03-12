@@ -1,18 +1,19 @@
 use anchor_lang::{
-    prelude::*,
-    solana_program::native_token::LAMPORTS_PER_SOL,
-    system_program,
-    system_program::{transfer, Transfer},
+    prelude::*, solana_program::native_token::LAMPORTS_PER_SOL, system_program,
     InstructionData,
 };
-use graph_demo::*;
-use runes::chain_drive::clockwork_sdk::state::{ThreadResponse, Trigger};
-use runes::{
-    chain_drive::{
-        self, instructions::summon::DataToBeSummoned, AccountMetaData,
+use anchor_spl::token::{self, Mint, Token, TokenAccount};
+use chain_drive::{
+    clockwork_sdk::state::{
+        InstructionData as ClockworkInstructionData, ThreadResponse, Trigger,
     },
-    inscribe_runes, ChainDrive, ClockworkInstructionData,
+    instructions::summon::DataToBeSummoned,
+    portal_config,
+    program::ChainDrive,
+    shdw, AccountMetaData, PortalConfig,
 };
+use graph_demo::*;
+use runes::inscribe_runes;
 use sha2::Digest;
 
 inscribe_runes!("../nodes.runes");
@@ -32,32 +33,67 @@ pub mod graph_demo_onchain {
         // Get runes
         let runes = unsafe { get_runes_unchecked() };
 
-        // Signer --> Machine
-        transfer(
+        // Initialize machine with SOL and SHDW
+        system_program::transfer(
             CpiContext::new(
                 ctx.accounts.system_program.to_account_info(),
-                Transfer {
+                system_program::Transfer {
                     from: ctx.accounts.admin.to_account_info(),
                     to: ctx.accounts.machine.to_account_info(),
                 },
             ),
             10 * LAMPORTS_PER_SOL,
         )?;
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                token::Transfer {
+                    from: ctx.accounts.admin_token_account.to_account_info(),
+                    to: ctx.accounts.machine_vault.to_account_info(),
+                    authority: ctx.accounts.admin.to_account_info(),
+                },
+            ),
+            1_000_000_000,
+        )?;
 
-        let hash_callback = get_hash_callback(ctx.accounts.metadata.key());
-        msg!("{:?}", &hash_callback);
-        runes.summon(
-            "Alice",
-            &ctx.accounts.machine,
-            &ctx.accounts.admin,
-            &ctx.accounts.metadata,
-            &ctx.accounts.system_program,
-            &ctx.accounts.portal_program,
-            None,
-            Some(hash_callback),
-            20_000_000,
-            0,
-        );
+        // Get Alice rune and summon Alice
+        let alice_rune = runes.get_rune("Alice").unwrap();
+        let signer_seeds: &[&[&[u8]]] = &[&[
+            "state-machine".as_ref(),
+            &[*ctx.bumps.get("machine").unwrap()],
+        ]];
+        let cpi_ctx =
+            CpiContext::<chain_drive::cpi::accounts::Summon>::new_with_signer(
+                ctx.accounts.portal_program.to_account_info(),
+                chain_drive::cpi::accounts::Summon {
+                    summoner: ctx.accounts.machine.to_account_info(),
+                    payer: ctx.accounts.admin.to_account_info(),
+                    metadata: ctx.accounts.metadata.to_account_info(),
+                    system_program: ctx
+                        .accounts
+                        .system_program
+                        .to_account_info(),
+                    portal_config: ctx.accounts.portal_config.to_account_info(),
+                    summoner_token_account: ctx
+                        .accounts
+                        .machine_vault
+                        .to_account_info(),
+                    shdw_mint: ctx.accounts.shdw_mint.to_account_info(),
+                    shdw_vault: ctx.accounts.metadata_vault.to_account_info(),
+                    token_program: ctx.accounts.token_program.to_account_info(),
+                },
+                signer_seeds,
+            );
+        chain_drive::cpi::summon(
+            cpi_ctx,
+            Pubkey::new_from_array(runes.storage_account),
+            alice_rune.name.to_string(),
+            alice_rune.len as usize,
+            alice_rune.hash,
+            Some(get_hash_callback(ctx.accounts.metadata.key())),
+            Some(0),    // unique clockwork thread id
+            20_000_000, // extra lamports
+        )?;
         msg!("successfully summoned Alice");
 
         Ok(())
@@ -82,63 +118,113 @@ pub mod graph_demo_onchain {
             msg!("hashing {}; new hash {:x}", &current_node.name, &new_hash);
             new_hash.try_into().expect("hash is always 32 bytes")
         };
+        ctx.accounts.machine.counter += 1;
 
         // Determine who to summon next
         msg!("next to hash is {}", current_node.next);
         ctx.accounts.machine.next = current_node.next.to_string();
-        ctx.accounts.machine.counter += 1;
+
+        let machine_vault =
+            Pubkey::find_program_address(&[machine().as_ref()], &crate::ID).0;
+        let next_metadata = DataToBeSummoned::get_pda(
+            &ctx.accounts.machine.key(),
+            &Pubkey::new_from_array(unsafe {
+                get_runes_unchecked().storage_account
+            }),
+            &ctx.accounts.machine.next,
+            Some(ctx.accounts.machine.counter),
+        );
+        let metadata_vault = Pubkey::find_program_address(
+            &[next_metadata.as_ref()],
+            &chain_drive::ID,
+        )
+        .0;
 
         Ok(ThreadResponse {
             next_instruction: Some(ClockworkInstructionData {
                 program_id: crate::ID,
                 accounts: vec![
+                    // machine
                     AccountMetaData::new(ctx.accounts.machine.key(), false),
-                    AccountMetaData::new(
-                        DataToBeSummoned::get_pda(
-                            &ctx.accounts.machine.key(),
-                            &Pubkey::new_from_array(unsafe {
-                                get_runes_unchecked().storage_account
-                            }),
-                            &ctx.accounts.machine.next,
-                        ),
-                        false,
-                    ),
+                    // machine vault
+                    AccountMetaData::new(machine_vault, false),
+                    // next metadata
+                    AccountMetaData::new(next_metadata, false),
+                    // payer
                     AccountMetaData::new(
                         chain_drive::clockwork_sdk::utils::PAYER_PUBKEY,
                         true,
                     ),
+                    // metadata vault
+                    AccountMetaData::new(metadata_vault, false),
+                    // portal config
+                    AccountMetaData::new_readonly(portal_config(), false),
+                    // shdw mint
+                    AccountMetaData::new_readonly(shdw::ID, false),
+                    // token program
+                    AccountMetaData::new_readonly(token::ID, false),
+                    // portal program
                     AccountMetaData::new_readonly(chain_drive::ID, false),
+                    // system program
                     AccountMetaData::new_readonly(system_program::ID, false),
                 ],
                 data: crate::instruction::SummonNext {}.data(),
             }),
+            // summon next when previous is deleted
+            // trigger: Some(Trigger::Account {
+            //     address: ctx.accounts.metadata.key(),
+            //     offset: 0,
+            //     size: 16,
+            // }),
             trigger: Some(Trigger::Immediate),
         })
     }
 
     pub fn summon_next(ctx: Context<SummonNext>) -> Result<()> {
+        // Get next rune and summon next
         let runes = unsafe { get_runes_unchecked() };
-        let hash_callback = get_hash_callback(ctx.accounts.next.key());
-
+        let next_rune = runes.get_rune(&ctx.accounts.machine.next).unwrap();
         let signer_seeds: &[&[&[u8]]] = &[&[
             "state-machine".as_ref(),
             &[*ctx.bumps.get("machine").unwrap()],
         ]];
+        let cpi_ctx =
+            CpiContext::<chain_drive::cpi::accounts::Summon>::new_with_signer(
+                ctx.accounts.portal_program.to_account_info(),
+                chain_drive::cpi::accounts::Summon {
+                    summoner: ctx.accounts.machine.to_account_info(),
+                    payer: ctx.accounts.payer.to_account_info(),
+                    metadata: ctx.accounts.next.to_account_info(),
+                    system_program: ctx
+                        .accounts
+                        .system_program
+                        .to_account_info(),
+                    portal_config: ctx.accounts.portal_config.to_account_info(),
+                    summoner_token_account: ctx
+                        .accounts
+                        .machine_vault
+                        .to_account_info(),
+                    shdw_mint: ctx.accounts.shdw_mint.to_account_info(),
+                    shdw_vault: ctx
+                        .accounts
+                        .next_token_account
+                        .to_account_info(),
+                    token_program: ctx.accounts.token_program.to_account_info(),
+                },
+                signer_seeds,
+            );
+        chain_drive::cpi::summon(
+            cpi_ctx,
+            Pubkey::new_from_array(runes.storage_account),
+            next_rune.name.to_string(),
+            next_rune.len as usize,
+            next_rune.hash,
+            Some(get_hash_callback(ctx.accounts.next.key())),
+            Some(ctx.accounts.machine.counter), // unique clockwork thread id
+            20_000_000,                         // extra lamports
+        )?;
 
-        runes.summon(
-            &ctx.accounts.machine.next,
-            &ctx.accounts.machine,
-            &ctx.accounts.payer,
-            &ctx.accounts.next,
-            &ctx.accounts.system_program,
-            &ctx.accounts.portal_program,
-            Some(signer_seeds),
-            Some(hash_callback),
-            10_000_000,
-            ctx.accounts.machine.counter,
-        );
-
-        // SOL TO PAYER
+        // SOL TO PAYER, so that the thread doesn't need to pay
         **ctx
             .accounts
             .machine
@@ -159,20 +245,45 @@ pub struct Initialize<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
 
+    #[account(mut)]
+    /// CHECK: can only be shdw token because shdw_mint is checked
+    pub admin_token_account: Box<Account<'info, TokenAccount>>,
+
     #[account(
         init,
         payer = admin,
         space = 100,
-        seeds = ["state-machine".as_ref()],
+        seeds = [
+            "state-machine".as_ref()
+        ],
         bump,
     )]
-    pub machine: Account<'info, Machine>,
+    pub machine: Box<Account<'info, Machine>>,
+
+    #[account(
+        init,
+        payer = admin,
+        seeds = [
+            machine.key().as_ref()
+        ],
+        bump,
+        token::mint = shdw_mint,
+        token::authority = machine,
+    )]
+    pub machine_vault: Box<Account<'info, TokenAccount>>,
 
     #[account(mut)]
-    /// CHECK: checked by shadow portal
-    pub metadata: AccountInfo<'info>,
+    /// CHECK: checked by shadow portal program
+    pub metadata: UncheckedAccount<'info>,
+    #[account(mut)]
+    /// CHECK: checked by shadow portal program
+    pub metadata_vault: UncheckedAccount<'info>,
 
-    // pub thread_program: Program<'info, ThreadProgram>,
+    pub portal_config: Account<'info, PortalConfig>,
+
+    #[account(address = shdw::ID)]
+    pub shdw_mint: Account<'info, Mint>,
+    pub token_program: Program<'info, Token>,
     pub portal_program: Program<'info, ChainDrive>,
     pub system_program: Program<'info, System>,
 }
@@ -194,10 +305,23 @@ pub struct Hash<'info> {
 pub struct SummonNext<'info> {
     #[account(
         mut,
-        seeds = ["state-machine".as_ref()],
+        seeds = [
+            "state-machine".as_ref()
+        ],
         bump,
     )]
     pub machine: Account<'info, Machine>,
+
+    #[account(
+        mut,
+        seeds = [
+            machine.key().as_ref()
+        ],
+        bump,
+        token::mint = shdw_mint,
+        token::authority = machine,
+    )]
+    pub machine_vault: Account<'info, TokenAccount>,
 
     #[account(mut)]
     /// CHECK: checked by shadow portal
@@ -205,6 +329,16 @@ pub struct SummonNext<'info> {
 
     #[account(mut)]
     pub payer: Signer<'info>,
+
+    #[account(mut)]
+    /// CHECK: checked by shadow portal program
+    pub next_token_account: UncheckedAccount<'info>,
+
+    pub portal_config: Account<'info, PortalConfig>,
+
+    #[account(address = shdw::ID)]
+    pub shdw_mint: Account<'info, Mint>,
+    pub token_program: Program<'info, Token>,
 
     pub portal_program: Program<'info, ChainDrive>,
     pub system_program: Program<'info, System>,

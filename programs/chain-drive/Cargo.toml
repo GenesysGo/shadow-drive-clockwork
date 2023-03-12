@@ -14,10 +14,12 @@ no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
 cpi = ["no-entrypoint"]
-default = []
+verbose = []
+default = ["verbose"]
 
 [dependencies]
-anchor-lang = "0.26.0"
+anchor-lang = { version = "0.26.0", features = ["init-if-needed"] }
+anchor-spl = "0.26.0"
 chrono = { version = "0.4.23", default-features = false }
 clockwork-sdk = {git = "https://github.com/genesysgo/clockwork.git", branch = "sdrive"}
 clockwork-cron = {git = "https://github.com/genesysgo/clockwork.git",  branch = "sdrive"}
