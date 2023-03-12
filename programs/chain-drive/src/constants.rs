@@ -1,5 +1,14 @@
+pub use anchor_spl::token::ID as TOKEN_PROGRAM_ID;
+
 pub const SDRIVE_OBJECT_PREFIX: &'static str =
     "https://shdw-drive.genesysgo.net";
+
+#[cfg(feature = "mainnet")]
+pub const ADMIN: &'static str = "D6wZ5U9onMC578mrKMp5PZtfyc5262426qKsYJW7nT3p";
+#[cfg(not(feature = "mainnet"))]
+pub const ADMIN: &'static str = "3cZiETXADiH4spd8rdBCt5DwuVQMPuNnq8e7Ci2ky65L";
+
+pub const INIT_FEE: u64 = 100;
 
 pub const TIME_DELAY_SECS: i64 = 0;
 
