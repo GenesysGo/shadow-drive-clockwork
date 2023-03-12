@@ -30,7 +30,7 @@ pub mod graph_demo_onchain {
         ctx.accounts.machine.next = "Alice".to_string();
 
         // Get runes
-        let runes = unsafe { get_runes() };
+        let runes = unsafe { get_runes_unchecked() };
 
         // Signer --> Machine
         transfer(
@@ -97,7 +97,7 @@ pub mod graph_demo_onchain {
                         DataToBeSummoned::get_pda(
                             &ctx.accounts.machine.key(),
                             &Pubkey::new_from_array(unsafe {
-                                get_runes().storage_account
+                                get_runes_unchecked().storage_account
                             }),
                             &ctx.accounts.machine.next,
                         ),
@@ -114,11 +114,10 @@ pub mod graph_demo_onchain {
             }),
             trigger: Some(Trigger::Immediate),
         })
-        // Ok(())
     }
 
     pub fn summon_next(ctx: Context<SummonNext>) -> Result<()> {
-        let runes = unsafe { get_runes() };
+        let runes = unsafe { get_runes_unchecked() };
         let hash_callback = get_hash_callback(ctx.accounts.next.key());
 
         let signer_seeds: &[&[&[u8]]] = &[&[
@@ -126,7 +125,6 @@ pub mod graph_demo_onchain {
             &[*ctx.bumps.get("machine").unwrap()],
         ]];
 
-        let extra = 5_000_000;
         runes.summon(
             &ctx.accounts.machine.next,
             &ctx.accounts.machine,
@@ -136,87 +134,23 @@ pub mod graph_demo_onchain {
             &ctx.accounts.portal_program,
             Some(signer_seeds),
             Some(hash_callback),
-            20_000_000,
+            10_000_000,
             ctx.accounts.machine.counter,
         );
 
         // SOL TO PAYER
-        msg!(
-            "machine before: {}",
-            ctx.accounts
-                .machine
-                .to_account_info()
-                .try_borrow_mut_lamports()?
-        );
         **ctx
             .accounts
             .machine
             .to_account_info()
-            .try_borrow_mut_lamports()? -= extra + 20_000_000;
-
-        msg!(
-            "machine after: {}",
-            ctx.accounts
-                .machine
-                .to_account_info()
-                .try_borrow_mut_lamports()?
-        );
-        // msg!(
-        //     "payer before: {}",
-        //     ctx.accounts
-        //         .payer
-        //         .to_account_info()
-        //         .try_borrow_mut_lamports()?
-        // );
+            .try_borrow_mut_lamports()? -= 10_000_000;
         **ctx
             .accounts
             .payer
             .to_account_info()
-            .try_borrow_mut_lamports()? += 20_000_000;
-        **ctx
-            .accounts
-            .next
-            .to_account_info()
-            .try_borrow_mut_lamports()? += extra;
-        msg!(
-            "payer after: {}",
-            ctx.accounts
-                .payer
-                .to_account_info()
-                .try_borrow_mut_lamports()?
-        );
-        msg!(
-            "next after: {}",
-            ctx.accounts.next.try_borrow_mut_lamports()?
-        );
+            .try_borrow_mut_lamports()? += 10_000_000;
 
         Ok(())
-        // Ok(ThreadResponse {
-        //     next_instruction: Some(ClockworkInstructionData {
-        //         program_id: crate::ID,
-        //         accounts: vec![
-        //             AccountMetaData::new(ctx.accounts.machine.key(), false),
-        //             AccountMetaData::new(
-        //                 DataToBeSummoned::get_pda(
-        //                     &ctx.accounts.machine.key(),
-        //                     &Pubkey::new_from_array(unsafe {
-        //                         get_runes().storage_account
-        //                     }),
-        //                     &ctx.accounts.machine.next,
-        //                 ),
-        //                 false,
-        //             ),
-        //             AccountMetaData::new_readonly(chain_drive::ID, false),
-        //             AccountMetaData::new_readonly(system_program::ID, false),
-        //         ],
-        //         data: crate::instruction::SummonNext {}.data(),
-        //     }),
-        //     trigger: Some(Trigger::Account {
-        //         address: machine(),
-        //         offset: 8,
-        //         size: 8,
-        //     }),
-        // })
     }
 }
 
@@ -238,10 +172,6 @@ pub struct Initialize<'info> {
     /// CHECK: checked by shadow portal
     pub metadata: AccountInfo<'info>,
 
-    // #[account(mut)]
-    // /// CHECK: checked by thread program
-    // pub thread: AccountInfo<'info>,
-
     // pub thread_program: Program<'info, ThreadProgram>,
     pub portal_program: Program<'info, ChainDrive>,
     pub system_program: Program<'info, System>,
@@ -256,9 +186,6 @@ pub struct Hash<'info> {
     /// CHECK: checked by shadow portal
     pub metadata: Account<'info, DataToBeSummoned>,
 
-    // #[account(mut)]
-    // /// CHECK: checked by thread program
-    // pub thread: Account<'info, Thread>,
     pub portal_program: Program<'info, ChainDrive>,
     pub system_program: Program<'info, System>,
 }
@@ -279,9 +206,6 @@ pub struct SummonNext<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
 
-    // #[account(mut)]
-    // /// TODO: validate pubkey
-    // pub thread: Account<'info, Thread>,
     pub portal_program: Program<'info, ChainDrive>,
     pub system_program: Program<'info, System>,
 }
@@ -300,10 +224,6 @@ fn get_hash_callback(metadata: Pubkey) -> ClockworkInstructionData {
         accounts: vec![
             AccountMetaData::new(crate::machine(), false),
             AccountMetaData::new(metadata, false),
-            // AccountMetaData::new(
-            //     Thread::pubkey(crate::machine(), b"graph".to_vec()),
-            //     false,
-            // ),
             AccountMetaData::new_readonly(chain_drive::ID, false),
             AccountMetaData::new_readonly(system_program::ID, false),
         ],
