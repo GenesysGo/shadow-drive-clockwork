@@ -21,7 +21,6 @@ anchor-spl = "0.26.0"
 sha2 = "0.10.6"
 chain-drive = { path = "../chain-drive", features = ["cpi"]}
 graph-demo = { path = "../../graph-demo" }
-# runes = { git = "https://github.com/genesysgo/shadow-drive-rust", branch = "runes" }
-runes = { path = "../../../shadow-drive-rust/runes" }
+runes = { git = "https://github.com/genesysgo/shadow-drive-rust", branch = "runes" }
 rkyv = "0.7.40"
 bytecheck = "0.6.10"
