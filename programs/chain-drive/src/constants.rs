@@ -6,7 +6,7 @@ pub const SDRIVE_OBJECT_PREFIX: &'static str =
 #[cfg(feature = "mainnet")]
 pub const ADMIN: &'static str = "D6wZ5U9onMC578mrKMp5PZtfyc5262426qKsYJW7nT3p";
 #[cfg(not(feature = "mainnet"))]
-pub const ADMIN: &'static str = "3cZiETXADiH4spd8rdBCt5DwuVQMPuNnq8e7Ci2ky65L";
+pub const ADMIN: &'static str = "2tW633ym3SpeMaBaAoCM7XsdCSHFB7KRGq6YmUvaFHFu";
 
 pub const INIT_FEE: u64 = 100;
 
@@ -23,7 +23,7 @@ pub mod payout_authority {
     #[cfg(feature = "mainnet")]
     anchor_lang::declare_id!("D6wZ5U9onMC578mrKMp5PZtfyc5262426qKsYJW7nT3p");
     #[cfg(not(feature = "mainnet"))]
-    anchor_lang::declare_id!("3cZiETXADiH4spd8rdBCt5DwuVQMPuNnq8e7Ci2ky65L");
+    anchor_lang::declare_id!("2tW633ym3SpeMaBaAoCM7XsdCSHFB7KRGq6YmUvaFHFu");
 }
 
 pub fn payout_account() -> anchor_lang::prelude::Pubkey {
