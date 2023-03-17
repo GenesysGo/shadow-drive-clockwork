@@ -3,6 +3,8 @@ members = [
     "programs/*",
     "tests",
     "graph-demo",
+    "runes",
+    "cli",
 ]
 
 [profile.release]
